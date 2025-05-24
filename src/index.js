@@ -7,6 +7,7 @@ const {
   InlineKeyboard,
 } = require('grammy');
 const { getAnswer, getRandomQuestion } = require('./utils');
+const http = require('http');
 
 config();
 
@@ -108,3 +109,8 @@ bot.catch((err) => {
 });
 
 bot.start();
+http
+  .createServer((req, res) => {
+    res.end('server for telegram bot');
+  })
+  .listen(3000);
