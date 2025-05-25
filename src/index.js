@@ -7,11 +7,12 @@ const {
   InlineKeyboard,
 } = require('grammy');
 const { getAnswer, getRandomQuestion } = require('./utils');
-const http = require('http');
 
 config();
 
 const bot = new Bot(process.env.BOT_TOKEN);
+
+const BASE_TOPICS = ['html', 'css', 'javascript', 'react'];
 
 bot.command('start', async (ctx) => {
   const keyboard = new Keyboard()
@@ -33,11 +34,10 @@ bot.hears(
   ['CSS', 'HTML', 'JavaScript', 'React', 'Random question'],
   async (ctx) => {
     let topic = ctx.message.text.toLocaleLowerCase();
-
+    let isRandom = '';
     if (topic === 'random question') {
-      const baseTopics = ['html', 'css', 'javascript', 'react'];
-      topic = baseTopics[Math.floor(Math.random() * baseTopics.length)];
-      console.log(topic);
+      topic = BASE_TOPICS[Math.floor(Math.random() * BASE_TOPICS.length)];
+      isRandom = '1';
     }
 
     const question = getRandomQuestion(topic);
@@ -52,8 +52,9 @@ bot.hears(
           JSON.stringify({
             id: question.id,
             topic,
-            hasOptions: question.hasOptions ? '1' : '0',
-            isCorrect: option.isCorrect ? '1' : '0',
+            hasOptions: question.hasOptions ? '1' : '',
+            isCorrect: option.isCorrect ? '1' : '',
+            isRandom,
           })
         );
       });
@@ -66,7 +67,8 @@ bot.hears(
         JSON.stringify({
           topic,
           id: question.id,
-          hasOptions: question.hasOptions ? '1' : '0',
+          hasOptions: question.hasOptions ? '1' : '',
+          isRandom,
         })
       );
       await ctx.reply(question.text, {
@@ -78,20 +80,82 @@ bot.hears(
 
 bot.on('callback_query:data', async (ctx) => {
   const res = JSON.parse(ctx.callbackQuery.data);
-  const { topic, id, hasOptions } = res;
-  if (hasOptions === '0') {
-    await ctx.reply(getAnswer(topic, id), {
+
+  const { topic, id, hasOptions, isCorrect, type, isRandom } = res;
+
+  const nextQuestionKeyboard = new InlineKeyboard().text(
+    'Next Question',
+    JSON.stringify({
+      type: 'next',
+      topic,
+    })
+  );
+
+  // === [A] Обработка кнопки "Next Question"
+  if (type === 'next') {
+    if (isRandom === '1') {
+      topic = BASE_TOPICS[Math.floor(Math.random() * BASE_TOPICS.length)];
+    }
+    const question = getRandomQuestion(topic);
+    if (question.hasOptions) {
+      const optionsKeyboard = new InlineKeyboard();
+      question.options.forEach((option, i) => {
+        if (i % 2 === 0) optionsKeyboard.row();
+        optionsKeyboard.text(
+          option.text,
+          JSON.stringify({
+            id: question.id,
+            topic,
+            hasOptions: question.hasOptions ? '1' : '',
+            isCorrect: option.isCorrect ? '1' : '',
+            isRandom,
+          })
+        );
+      });
+      await ctx.reply(question.text, {
+        reply_markup: optionsKeyboard,
+      });
+    } else {
+      const answerKeyboard = new InlineKeyboard().text(
+        'Get Answer',
+        JSON.stringify({
+          topic,
+          id: question.id,
+          hasOptions: question.hasOptions ? '1' : '',
+          isRandom,
+        })
+      );
+      await ctx.reply(question.text, {
+        reply_markup: answerKeyboard,
+      });
+    }
+    await ctx.answerCallbackQuery();
+    return;
+  }
+
+  // === [B] Обработка кнопки "Get Answer"
+  if (!hasOptions || hasOptions === '') {
+    const answer = getAnswer(topic, id);
+    await ctx.reply(answer, {
       parse_mode: 'HTML',
+      reply_markup: nextQuestionKeyboard,
     });
     await ctx.answerCallbackQuery();
     return;
   }
-  if (res.isCorrect === '1') {
-    await ctx.reply('Correct!');
+
+  // === [C] Обработка вариантов ответа
+  if (isCorrect === '1') {
+    await ctx.reply('Correct!', {
+      reply_markup: nextQuestionKeyboard,
+    });
   } else {
     const answer = getAnswer(topic, id, hasOptions);
-    await ctx.reply(`Incorrect! \n Correct answer: ${answer}`);
+    await ctx.reply(`Incorrect! \n Correct answer: ${answer}`, {
+      reply_markup: nextQuestionKeyboard,
+    });
   }
+
   await ctx.answerCallbackQuery();
 });
 
@@ -107,9 +171,23 @@ bot.catch((err) => {
     console.error('Unknown error:', e);
   }
 });
-
 bot.start();
-http
+console.log('Bot is running...');
+
+process.once('SIGINT', async () => {
+  console.log('SIGINT received: stopping bot...');
+  await bot.stop();
+  process.exit(0);
+});
+
+process.once('SIGTERM', async () => {
+  console.log('SIGTERM received: stopping bot...');
+  await bot.stop();
+  process.exit(0);
+});
+
+// because free deploy server is demand server port render.com
+require('http')
   .createServer((req, res) => {
     res.end('server for telegram bot');
   })
