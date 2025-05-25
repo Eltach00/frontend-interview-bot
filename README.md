@@ -3,7 +3,7 @@
 A Telegram bot that helps you prepare for frontend interviews by asking questions on topics like HTML, CSS, JavaScript, and React. Users can choose a topic or receive a random question. The bot supports multiple-choice and open-ended questions, with instant feedback.
 
 # Try the Bot
-[@el_nodejs_bot](@el_nodejs_bot)
+[Telegram @el_nodejs_bot](https://t.me/el_nodejs_bot)
 ---
 
 ## 📌 Features
